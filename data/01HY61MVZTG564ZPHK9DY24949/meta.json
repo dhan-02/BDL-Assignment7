@@ -1,0 +1,17 @@
+{
+	"ulid": "01HY61MVZTG564ZPHK9DY24949",
+	"minTime": 1716007810730,
+	"maxTime": 1716012000000,
+	"stats": {
+		"numSamples": 2858,
+		"numSeries": 1357,
+		"numChunks": 1357
+	},
+	"compaction": {
+		"level": 1,
+		"sources": [
+			"01HY61MVZTG564ZPHK9DY24949"
+		]
+	},
+	"version": 1
+}

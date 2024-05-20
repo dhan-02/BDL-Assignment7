@@ -2,14 +2,23 @@ import sys
 import numpy as np
 from tensorflow.keras.models import load_model
 from tensorflow.keras.models import Sequential
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile,Body, Request
+import time
 from typing import List
 from PIL import Image
 from io import BytesIO
 import uvicorn
 import os
+from prometheus_client import Summary, start_http_server, Counter, Gauge
 
 app = FastAPI(docs_url="/docs")
+
+REQUEST_DURATION = Summary('api_timing', 'Request duration in seconds')
+counter = Counter('api_call_counter', 'number of times that API is called', ['endpoint', 'client'])
+gauge_time = Gauge('api_runtime_secs', 'runtime of the method in seconds', ['endpoint', 'client']) 
+gauge_timeperc = Gauge('api_TL_ratio', 'running time of the API with respect to the length of the input text', ['endpoint', 'client']) 
+gauge_char = Gauge('api_len_input', 'Length of input text', ['endpoint', 'client']) 
+
 
 # Function to load the model from the specified path
 def load_my_model(path: str) -> Sequential:
@@ -43,7 +52,6 @@ def load_my_model(path: str) -> Sequential:
         # Load the model using the keras function
         loaded_model = load_model(path)
         return loaded_model
-    
     except IOError as e:
         raise IOError(f"Error reading model file: {e}")
     
@@ -82,6 +90,21 @@ def predict_digit(model: Sequential, data_point: list) -> str:
     # Return the predicted digit as a string
     return str(predicted_digit)
 
+def format_image(img):
+    """
+    Resize any given image to 28x28 pixels.
+
+    Args:
+    img: The input image.
+
+    Returns:
+    Image: The resized image.
+    """
+    # Resize the image to 28x28
+    resized_img = img.resize((28, 28)) 
+    
+    return resized_img
+
 def preprocess_image(file) -> List[float]:
     """
     Helper function to Preprocesses the uploaded image.
@@ -92,12 +115,14 @@ def preprocess_image(file) -> List[float]:
     Returns:
     List[float]: Serialized array of image pixels after preprocessing.
     """
-
     if file is None:
         raise ValueError("File is not provided.")
     
     # Open the PIL Image
     img = Image.open(BytesIO(file))
+
+    # Format the image (resize to 28x28) : extra in task2
+    img = format_image(img)
 
     # Convert to grayscale
     img = img.convert('L')
@@ -113,8 +138,9 @@ def preprocess_image(file) -> List[float]:
 
     return img_array.tolist()[0]
 
+@REQUEST_DURATION.time()
 @app.post("/predict")
-async def predict_image_digit(file: UploadFile = File(...)):
+async def predict_image_digit(request:Request,file: UploadFile = File(...),):
     """
     API Endpoint to predict the digit from the uploaded image file.
 
@@ -124,6 +150,13 @@ async def predict_image_digit(file: UploadFile = File(...)):
     Returns:
     dict: A dictionary containing the predicted digit.
     """
+    # Increment counter
+    counter.labels(endpoint='/predict', client=request.client.host).inc()
+    start = time.time()
+
+    # Getting length of input text
+    content_length = int(request.headers.get('content-length', 0))
+
     # Read the bytes from the uploaded image
     contents = await file.read()
     
@@ -138,6 +171,12 @@ async def predict_image_digit(file: UploadFile = File(...)):
 
     # Predict the digit using the serialized array
     predicted_digit = predict_digit(loaded_model, processed_image)
+
+    time_taken = time.time() - start
+    gauge_time.labels(endpoint='/predict', client=request.client.host).set(time_taken)
+    gauge_char.labels(endpoint='/predict', client=request.client.host).set(content_length)
+    if (content_length>0):
+        gauge_timeperc.labels(endpoint='/predict', client=request.client.host).set(time_taken*1e6/content_length)
     
     # Return the predicted digit to the client
     return {"digit": predicted_digit}
@@ -146,8 +185,10 @@ if __name__ == "__main__":
 
     # Check if the path to the model is provided as a command line argument
     if len(sys.argv) != 2:
-        print("Usage: python task1.py <path_to_model>")
+        print("Usage: python task2.py <path_to_model>")
         sys.exit(1)
     
+    start_http_server(18000)
+
     # Run the FastAPI app
-    uvicorn.run(app, host="127.0.0.1", port=5000)
+    uvicorn.run(app, host="0.0.0.0", port=5000)

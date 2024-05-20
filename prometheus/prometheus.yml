@@ -1,0 +1,27 @@
+#/push my global config
+global:
+  scrape_interval: 15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 5s # Evaluate rules every 15 seconds. The default is every 1 minute.
+  # scrape_timeout is set to the global default (10s).
+
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: "mnist_app"
+    scrape_interval: 5s
+    static_configs:
+      - targets: ["localhost:18000"]
+
+  - job_name: node
+    static_configs:
+    - targets: ['localhost:9200']
+  
+remote_write:
+  - url: https://prometheus-prod-43-prod-ap-south-1.grafana.net/api/prom/push
+    basic_auth:
+      username: 1585127
+      password: glc_eyJvIjoiMTEyNzA5NyIsIm4iOiJzdGFjay05MzQ3MjAtaW50ZWdyYXRpb24tdG9rZW5fZGVmYXVsdCIsImsiOiJVVjgxaHIyZzE0VnVocTEwUXlnNnQyTjMiLCJtIjp7InIiOiJwcm9kLWFwLXNvdXRoLTEifX0=
+
